@@ -6,6 +6,8 @@ import com.musala.devbe.entity.SensorReading;
 import com.musala.devbe.repository.DeviceLogRepository;
 import com.musala.devbe.repository.DeviceStatusRepository;
 import com.musala.devbe.repository.SensorReadingRepository;
+import com.musala.devbe.entity.ElectricityToken;
+import com.musala.devbe.repository.ElectricityTokenRepository;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,13 +18,17 @@ public class DeviceService {
     private final DeviceStatusRepository statusRepo;
     private final DeviceLogRepository logRepo;
     private final SensorReadingRepository sensorRepo;
+    private final ElectricityTokenRepository tokenRepo;
 
     public DeviceService(DeviceStatusRepository statusRepo,
                          DeviceLogRepository logRepo,
-                         SensorReadingRepository sensorRepo) {
+                         SensorReadingRepository sensorRepo,
+                         ElectricityTokenRepository tokenRepo
+                         ) {
         this.statusRepo = statusRepo;
         this.logRepo    = logRepo;
         this.sensorRepo = sensorRepo;
+        this.tokenRepo  = tokenRepo;
     }
 
     /**
@@ -76,7 +82,12 @@ public class DeviceService {
      */
     public SensorReading saveSensor(SensorReading sensor) {
         sensor.setTimestamp(LocalDateTime.now());
-        return sensorRepo.save(sensor);
+        SensorReading saved = sensorRepo.save(sensor);
+        updateElectricityUsage(
+                sensor.getDeviceId(),
+                sensor.getTotalPower()
+        );
+        return saved;
     }
 
     /**
@@ -100,5 +111,51 @@ public class DeviceService {
      */
     public List<SensorReading> getChartData(String deviceId) {
         return sensorRepo.findTop10ByDeviceIdOrderByTimestampDesc(deviceId);
+    }
+
+    /**
+     * Get latest electricity token
+     *
+     * @param deviceId the device ID
+     * @return latest token
+     */
+    public ElectricityToken getLatestToken(String deviceId) {
+
+        return tokenRepo
+                .findTopByDeviceIdOrderByCreatedAtDesc(deviceId)
+                .orElse(null);
+    }
+
+    /**
+     * Update remaining token based on power usage
+     *
+     * @param deviceId the device ID
+     * @param totalPower watt
+     */
+    public void updateElectricityUsage(String deviceId, Double totalPower) {
+
+        ElectricityToken token = tokenRepo
+                .findTopByDeviceIdOrderByCreatedAtDesc(deviceId)
+                .orElse(null);
+
+        if (token == null) {
+            return;
+        }
+
+        // asumsi pemakaian per 5 detik
+        double hours = 5.0 / 3600.0;
+
+        // watt → kWh
+        double usedKwh = (totalPower * hours) / 1000.0;
+
+        token.setUsedKwh(token.getUsedKwh() + usedKwh);
+
+        token.setRemainingKwh(
+                token.getTotalKwh() - token.getUsedKwh()
+        );
+
+        token.setUpdatedAt(LocalDateTime.now());
+
+        tokenRepo.save(token);
     }
 }

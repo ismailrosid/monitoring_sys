@@ -4,6 +4,7 @@ import com.musala.devbe.entity.DeviceLog;
 import com.musala.devbe.entity.DeviceStatus;
 import com.musala.devbe.entity.SensorReading;
 import com.musala.devbe.service.DeviceService;
+import com.musala.devbe.entity.ElectricityToken;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -264,5 +265,19 @@ public class DeviceController {
 
             throw e;
         }
+    }
+
+    /**
+     * GET latest electricity token
+     *
+     * @param deviceId the device ID
+     * @return latest electricity token
+     */
+    @GetMapping("/token/{deviceId}")
+    public ElectricityToken getToken(@PathVariable String deviceId) {
+
+        log.info("Fetching token for deviceId: {}", deviceId);
+
+        return service.getLatestToken(deviceId);
     }
 }
