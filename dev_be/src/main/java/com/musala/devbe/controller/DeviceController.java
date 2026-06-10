@@ -4,15 +4,18 @@ import com.musala.devbe.entity.DeviceLog;
 import com.musala.devbe.entity.DeviceStatus;
 import com.musala.devbe.entity.SensorReading;
 import com.musala.devbe.service.DeviceService;
-import com.musala.devbe.entity.ElectricityToken;
+import com.musala.devbe.entity.ElectricityTokenHistory;
+
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
@@ -30,54 +33,93 @@ public class DeviceController {
     }
 
     /**
-     * GET latest device status — called by Vue dashboard
+     * CREATE new device
      *
-     * @param deviceId the device ID
-     * @return the device status
+     * @param device the device information
+     * @return created device
      */
-    @GetMapping("/status/{deviceId}")
-    public DeviceStatus getStatus(@PathVariable String deviceId) {
-        log.info("Fetching status for deviceId: {}", deviceId);
+    @PostMapping("/device")
+    public DeviceStatus addDevice(@RequestBody DeviceStatus device) {
+        log.info(
+                "Creating device with deviceId: {}",
+                device.getDeviceId()
+        );
         try {
-            DeviceStatus status = service.getStatus(deviceId);
-            if (status == null) {
-                log.warn("No status found for deviceId: {}", deviceId);
-            } else {
-                log.info("SUCCESS fetching status for deviceId: {}", deviceId);
-            }
-            return status;
+
+            DeviceStatus created = service.addDevice(device);
+            log.info(
+                    "SUCCESS creating device | deviceId={}",
+                    created.getDeviceId()
+            );
+
+            return created;
+
         } catch (Exception e) {
-            log.error("FAILED fetching status for deviceId: {}", deviceId, e);
+            log.error(
+                    "FAILED creating device | deviceId={}",
+                    device.getDeviceId(),
+                    e
+            );
             throw e;
         }
     }
 
     /**
-     * UPDATE device status — called by ESP32 or Vue control page
+     * GET device information
+     *
+     * @param deviceId the device ID
+     * @return device information
+     */
+    @GetMapping("/device/{deviceId}")
+    public DeviceStatus getDeviceInfo(@PathVariable String deviceId) {
+        log.info("Fetching device info for deviceId: {}", deviceId);
+        try {
+            DeviceStatus device = service.getDeviceInfo(deviceId);
+            if (device == null) {
+                log.warn(
+                        "No device info found for deviceId: {}",
+                        deviceId
+                );
+            } else {
+                log.info(
+                        "SUCCESS fetching device info for deviceId: {}",
+                        deviceId
+                );
+            }
+            return device;
+        } catch (Exception e) {
+            log.error(
+                    "FAILED fetching device info for deviceId: {}",
+                    deviceId,
+                    e
+            );
+            throw e;
+        }
+    }
+
+    /**
+     * UPDATE device status — called by microcontroller or Vue control page
      *
      * @param status the device status
      * @return the updated device status
      */
-    @PostMapping("/status")
+    @PutMapping("/status")
     public DeviceStatus updateStatus(@RequestBody DeviceStatus status) {
-
-        log.info("Updating status for deviceId: {}", status.getDeviceId());
-
+        log.info(
+                "Updating status for deviceId: {}",
+                status.getDeviceId()
+        );
         try {
-
             DeviceStatus updated = service.updateStatus(status);
-
             log.info(
-                    "SUCCESS updating status | deviceId={} | lampOn={} | fanOn={}",
+                    "SUCCESS updating status | deviceId={} | deviceName={} | lampOn={} | fanOn={}",
                     updated.getDeviceId(),
+                    updated.getDeviceName(),
                     updated.getLampOn(),
                     updated.getFanOn()
             );
-
             return updated;
-
         } catch (Exception e) {
-
             log.error(
                     "FAILED updating status for deviceId: {}",
                     status.getDeviceId(),
@@ -87,7 +129,7 @@ public class DeviceController {
             throw e;
         }
     }
-
+    
     /**
      * GET device logs
      *
@@ -96,29 +138,21 @@ public class DeviceController {
      */
     @GetMapping("/log/{deviceId}")
     public List<DeviceLog> getLogs(@PathVariable String deviceId) {
-
         log.info("Fetching logs for deviceId: {}", deviceId);
-
         try {
-
             List<DeviceLog> logs = service.getLogs(deviceId);
-
             log.info(
                     "SUCCESS fetching logs | deviceId={} | totalLogs={}",
                     deviceId,
                     logs.size()
             );
-
             return logs;
-
         } catch (Exception e) {
-
             log.error(
                     "FAILED fetching logs for deviceId: {}",
                     deviceId,
                     e
             );
-
             throw e;
         }
     }
@@ -131,68 +165,52 @@ public class DeviceController {
      */
     @PostMapping("/log")
     public DeviceLog addLog(@RequestBody DeviceLog logEntry) {
-
         log.info(
                 "Adding log for deviceId: {} - action: {}",
                 logEntry.getDeviceId(),
                 logEntry.getAction()
         );
-
         try {
-
             DeviceLog saved = service.saveLog(logEntry);
-
             log.info(
                     "SUCCESS saving log | deviceId={} | action={}",
                     saved.getDeviceId(),
                     saved.getAction()
             );
-
             return saved;
-
         } catch (Exception e) {
-
             log.error(
                     "FAILED saving log for deviceId: {}",
                     logEntry.getDeviceId(),
                     e
             );
-
             throw e;
         }
     }
 
     /**
-     * INSERT sensor reading — called by ESP8266 every N seconds
+     * INSERT sensor reading — called by microcontroller every N seconds
      *
      * @param sensor the sensor reading
      * @return the saved sensor reading
      */
     @PostMapping("/sensor")
     public SensorReading addSensor(@RequestBody SensorReading sensor) {
-
         log.info("Adding sensor reading for deviceId: {}", sensor.getDeviceId());
-
         try {
-
             SensorReading saved = service.saveSensor(sensor);
-
             log.info(
                     "SUCCESS saving sensor | deviceId={} | totalPower={}",
                     saved.getDeviceId(),
                     saved.getTotalPower()
             );
-
             return saved;
-
         } catch (Exception e) {
-
             log.error(
                     "FAILED saving sensor for deviceId: {}",
                     sensor.getDeviceId(),
                     e
             );
-
             throw e;
         }
     }
@@ -205,29 +223,22 @@ public class DeviceController {
      */
     @GetMapping("/sensor/latest/{deviceId}")
     public SensorReading getLatest(@PathVariable String deviceId) {
-
         log.info("Fetching latest sensor reading for deviceId: {}", deviceId);
-
         try {
-
             SensorReading sensor = service.getLatestSensor(deviceId);
-
             if (sensor == null) {
                 log.warn("No latest sensor data found for deviceId: {}", deviceId);
             } else {
                 log.info("SUCCESS fetching latest sensor for deviceId: {}", deviceId);
             }
-
             return sensor;
 
         } catch (Exception e) {
-
             log.error(
                     "FAILED fetching latest sensor for deviceId: {}",
                     deviceId,
                     e
             );
-
             throw e;
         }
     }
@@ -240,25 +251,91 @@ public class DeviceController {
      */
     @GetMapping("/sensor/chart/{deviceId}")
     public List<SensorReading> getChartData(@PathVariable String deviceId) {
-
-        log.info("Fetching chart data for deviceId: {}", deviceId);
-
+     log.info("Fetching chart data for deviceId: {}", deviceId);
         try {
-
             List<SensorReading> chartData = service.getChartData(deviceId);
-
             log.info(
                     "SUCCESS fetching chart data | deviceId={} | totalData={}",
                     deviceId,
                     chartData.size()
             );
-
             return chartData;
-
         } catch (Exception e) {
-
             log.error(
                     "FAILED fetching chart data for deviceId: {}",
+                    deviceId,
+                    e
+            );
+            throw e;
+        }
+    }
+
+    /**
+     * INSERT electricity token history
+     *
+     * @param token the electricity token history
+     * @return the saved electricity token history
+     */
+    @PostMapping("/token")
+    public ElectricityTokenHistory addToken(
+            @RequestBody ElectricityTokenHistory token
+    ) {
+        log.info(
+                "Adding electricity token | deviceId={} | nominal={}",
+                token.getDeviceId(),
+                token.getNominalRupiah()
+        );
+        try {
+            ElectricityTokenHistory saved =
+                    service.addToken(token);
+            log.info(
+                    "SUCCESS adding electricity token | deviceId={} | nominal={} | purchasedKwh={}",
+                    saved.getDeviceId(),
+                    saved.getNominalRupiah(),
+                    saved.getPurchasedKwh()
+            );
+
+            return saved;
+        } catch (Exception e) {
+            log.error(
+                    "FAILED adding electricity token | deviceId={}",
+                    token.getDeviceId(),
+                    e
+            );
+
+            throw e;
+        }
+    }
+
+    /**
+     * GET electricity token summary
+     *
+     * @param deviceId the device ID
+     * @return electricity token summary
+     */
+    @GetMapping("/token/{deviceId}")
+    public Map<String, Object> getToken(
+            @PathVariable String deviceId
+    ) {
+        log.info(
+                "Fetching electricity token summary for deviceId: {}",
+                deviceId
+        );
+
+        try {
+
+            Map<String, Object> tokenSummary =
+                    service.getTokenSummary(deviceId);
+
+            log.info(
+                    "SUCCESS fetching electricity token summary | deviceId={}",
+                    deviceId
+            );
+
+            return tokenSummary;
+        } catch (Exception e) {
+            log.error(
+                    "FAILED fetching electricity token summary | deviceId={}",
                     deviceId,
                     e
             );
@@ -268,16 +345,13 @@ public class DeviceController {
     }
 
     /**
-     * GET latest electricity token
+     * Health check endpoint
      *
-     * @param deviceId the device ID
-     * @return latest electricity token
+     * @return application status
      */
-    @GetMapping("/token/{deviceId}")
-    public ElectricityToken getToken(@PathVariable String deviceId) {
-
-        log.info("Fetching token for deviceId: {}", deviceId);
-
-        return service.getLatestToken(deviceId);
-    }
+    @GetMapping("/health")
+    public String health() {
+        log.info("Health check requested");
+        return "Application is running";
+    } 
 }

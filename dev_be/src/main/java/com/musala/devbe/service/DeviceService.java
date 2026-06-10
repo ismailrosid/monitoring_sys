@@ -2,15 +2,21 @@ package com.musala.devbe.service;
 
 import com.musala.devbe.entity.DeviceLog;
 import com.musala.devbe.entity.DeviceStatus;
+import com.musala.devbe.entity.ElectricityTokenHistory;
 import com.musala.devbe.entity.SensorReading;
 import com.musala.devbe.repository.DeviceLogRepository;
 import com.musala.devbe.repository.DeviceStatusRepository;
+import com.musala.devbe.repository.ElectricityTokenHistoryRepository;
 import com.musala.devbe.repository.SensorReadingRepository;
-import com.musala.devbe.entity.ElectricityToken;
-import com.musala.devbe.repository.ElectricityTokenRepository;
+
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+
+import java.util.Map;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 @Service
 public class DeviceService {
@@ -18,17 +24,17 @@ public class DeviceService {
     private final DeviceStatusRepository statusRepo;
     private final DeviceLogRepository logRepo;
     private final SensorReadingRepository sensorRepo;
-    private final ElectricityTokenRepository tokenRepo;
+    private final ElectricityTokenHistoryRepository tokenRepo;
 
     public DeviceService(DeviceStatusRepository statusRepo,
                          DeviceLogRepository logRepo,
                          SensorReadingRepository sensorRepo,
-                         ElectricityTokenRepository tokenRepo
+                         ElectricityTokenHistoryRepository tokenRepo
                          ) {
         this.statusRepo = statusRepo;
         this.logRepo    = logRepo;
         this.sensorRepo = sensorRepo;
-        this.tokenRepo  = tokenRepo;
+        this.tokenRepo = tokenRepo;
     }
 
     /**
@@ -75,7 +81,7 @@ public class DeviceService {
     }
 
     /**
-     * Save sensor reading from ESP32 with current timestamp
+     * Save sensor reading from microcontroller with current timestamp
      *
      * @param sensor the sensor reading
      * @return the saved sensor reading
@@ -83,11 +89,8 @@ public class DeviceService {
     public SensorReading saveSensor(SensorReading sensor) {
         sensor.setTimestamp(LocalDateTime.now());
         SensorReading saved = sensorRepo.save(sensor);
-        updateElectricityUsage(
-                sensor.getDeviceId(),
-                sensor.getTotalPower()
-        );
         return saved;
+        
     }
 
     /**
@@ -113,49 +116,95 @@ public class DeviceService {
         return sensorRepo.findTop10ByDeviceIdOrderByTimestampDesc(deviceId);
     }
 
+
     /**
-     * Get latest electricity token
+     * Get device information by deviceId
      *
      * @param deviceId the device ID
-     * @return latest token
+     * @return device information
      */
-    public ElectricityToken getLatestToken(String deviceId) {
-
-        return tokenRepo
-                .findTopByDeviceIdOrderByCreatedAtDesc(deviceId)
+    public DeviceStatus getDeviceInfo(String deviceId) {
+        DeviceStatus device = statusRepo
+                .findById(deviceId)
                 .orElse(null);
+
+        if (device == null) {
+            return null;
+        }
+        
+        if (device.getUpdatedAt() != null) {
+            boolean online = device.getUpdatedAt()
+                    .isAfter(LocalDateTime.now().minusMinutes(1));
+            device.setEspOnline(online);
+              if (!online) {
+                device.setLampOn(false);
+                device.setFanOn(false);
+                device.setPirEntryDetected(false);
+                device.setPirExitDetected(false);
+                }
+        }
+        return device;
     }
 
     /**
-     * Update remaining token based on power usage
+     * Create new device
      *
-     * @param deviceId the device ID
-     * @param totalPower watt
+     * @param device the device information
+     * @return created device
      */
-    public void updateElectricityUsage(String deviceId, Double totalPower) {
+    public DeviceStatus addDevice(DeviceStatus device) {
 
-        ElectricityToken token = tokenRepo
-                .findTopByDeviceIdOrderByCreatedAtDesc(deviceId)
-                .orElse(null);
+        device.setUpdatedAt(LocalDateTime.now());
 
-        if (token == null) {
-            return;
-        }
+        return statusRepo.save(device);
+    }
 
-        // asumsi pemakaian per 5 detik
-        double hours = 5.0 / 3600.0;
 
-        // watt → kWh
-        double usedKwh = (totalPower * hours) / 1000.0;
+    public ElectricityTokenHistory addToken(
+        ElectricityTokenHistory token
+    ) {
 
-        token.setUsedKwh(token.getUsedKwh() + usedKwh);
-
-        token.setRemainingKwh(
-                token.getTotalKwh() - token.getUsedKwh()
+        double tariff = 1500.0;
+        token.setTariffPerKwh(tariff);
+        token.setPurchasedKwh(
+                token.getNominalRupiah() / tariff
         );
+        token.setCreatedAt(LocalDateTime.now());
 
-        token.setUpdatedAt(LocalDateTime.now());
+        return tokenRepo.save(token);
+    }
 
-        tokenRepo.save(token);
+    public Map<String, Object> getTokenSummary(
+            String deviceId
+    ) {
+
+        List<ElectricityTokenHistory> histories =
+                tokenRepo.findCurrentMonthByDeviceId(deviceId);
+        double nominal = histories.stream()
+                .mapToDouble(ElectricityTokenHistory::getNominalRupiah)
+                .sum();
+        double totalKwh = histories.stream()
+                .mapToDouble(ElectricityTokenHistory::getPurchasedKwh)
+                .sum();
+        double usedKwh = 0.0;
+                LocalDateTime now = LocalDateTime.now();
+
+        DateTimeFormatter periodFormatter =
+                DateTimeFormatter.ofPattern("MMMM yyyy", new Locale("id", "ID"));
+
+        DateTimeFormatter updatedFormatter =
+                DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm",new Locale("id", "ID"));
+
+        Map<String, Object> result = new HashMap<>();
+
+        result.put("nominalRupiah", nominal);
+        result.put("totalKwh", totalKwh);
+        result.put("usedKwh", usedKwh);
+        result.put("remainingKwh", totalKwh - usedKwh);
+
+        result.put("period",now.format(periodFormatter));
+        result.put("updatedAt",now.format(updatedFormatter));
+
+        return result;
     }
 }
